@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import ExpenseForm from './components/ExpenseForm';
+import ExpenseList from './components/ExpenseList';
+import Summary from './components/Summary';
 
 function App() {
   const [expenses, setExpenses] = useState([]);
@@ -9,21 +12,33 @@ function App() {
     expense_date: '',
     description: ''
   });
-
   const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  // 获取数据
   const fetchExpenses = async () => {
-    const res = await fetch('http://localhost:5000/api/expenses');
-    const data = await res.json();
-    setExpenses(data);
+    try {
+      setLoading(true);
+      setError('');
+      const res = await fetch('http://localhost:5000/api/expenses');
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch expenses');
+      }
+
+      const data = await res.json();
+      setExpenses(data);
+    } catch (err) {
+      setError('Failed to load expenses.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchExpenses();
   }, []);
 
-  // 输入变化
   const handleChange = (e) => {
     setForm({
       ...form,
@@ -31,80 +46,158 @@ function App() {
     });
   };
 
-  // 提交（新增 or 修改）
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (editingId) {
-      await fetch(`http://localhost:5000/api/expenses/${editingId}`, {
-        method: 'PUT',
+    try {
+      setError('');
+
+      const url = editingId
+        ? `http://localhost:5000/api/expenses/${editingId}`
+        : 'http://localhost:5000/api/expenses';
+
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
       });
+
+      if (!res.ok) {
+        throw new Error('Request failed');
+      }
+
+      setForm({
+        title: '',
+        category: '',
+        amount: '',
+        expense_date: '',
+        description: ''
+      });
+
       setEditingId(null);
-    } else {
-      await fetch('http://localhost:5000/api/expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
-      });
+      fetchExpenses();
+    } catch (err) {
+      setError(editingId ? 'Failed to update expense.' : 'Failed to add expense.');
     }
-
-    setForm({
-      title: '',
-      category: '',
-      amount: '',
-      expense_date: '',
-      description: ''
-    });
-
-    fetchExpenses();
   };
 
-  // 删除
   const handleDelete = async (id) => {
-    await fetch(`http://localhost:5000/api/expenses/${id}`, {
-      method: 'DELETE'
-    });
-    fetchExpenses();
+    try {
+      setError('');
+      const res = await fetch(`http://localhost:5000/api/expenses/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        throw new Error('Delete failed');
+      }
+
+      fetchExpenses();
+    } catch (err) {
+      setError('Failed to delete expense.');
+    }
   };
 
-  // 编辑
   const handleEdit = (expense) => {
-    setForm(expense);
+    setForm({
+      title: expense.title || '',
+      category: expense.category || '',
+      amount: expense.amount || '',
+      expense_date: expense.expense_date?.slice(0, 10) || '',
+      description: expense.description || ''
+    });
     setEditingId(expense.id);
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
-      <h1>Expense Tracker</h1>
+    <div
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#f5f7fb',
+        padding: '40px 20px',
+        fontFamily: 'Arial, sans-serif'
+      }}
+    >
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        <h1
+          style={{
+            textAlign: 'center',
+            marginBottom: '30px',
+            fontSize: '48px',
+            color: '#1f2937'
+          }}
+        >
+          Expense Tracker
+        </h1>
 
-      {/* 表单 */}
-      <form onSubmit={handleSubmit} style={{ marginBottom: '20px' }}>
-        <input name="title" placeholder="Title" value={form.title} onChange={handleChange} required />
-        <input name="category" placeholder="Category" value={form.category} onChange={handleChange} required />
-        <input name="amount" type="number" placeholder="Amount" value={form.amount} onChange={handleChange} required />
-        <input name="expense_date" type="date" value={form.expense_date} onChange={handleChange} required />
-        <input name="description" placeholder="Description" value={form.description} onChange={handleChange} />
+        {error && (
+          <div
+            style={{
+              backgroundColor: '#fee2e2',
+              color: '#b91c1c',
+              padding: '12px 16px',
+              borderRadius: '10px',
+              marginBottom: '20px'
+            }}
+          >
+            {error}
+          </div>
+        )}
 
-        <button type="submit">
-          {editingId ? 'Update' : 'Add'}
-        </button>
-      </form>
-
-      {/* 列表 */}
-      {expenses.map((exp) => (
-        <div key={exp.id} style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '10px' }}>
-          <h3>{exp.title}</h3>
-          <p>Category: {exp.category}</p>
-          <p>Amount: ${exp.amount}</p>
-          <p>Date: {exp.expense_date?.slice(0, 10)}</p>
-          <p>{exp.description}</p>
-
-          <button onClick={() => handleEdit(exp)}>Edit</button>
-          <button onClick={() => handleDelete(exp.id)}>Delete</button>
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            padding: '24px',
+            borderRadius: '16px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            marginBottom: '20px'
+          }}
+        >
+          <ExpenseForm
+            form={form}
+            handleChange={handleChange}
+            handleSubmit={handleSubmit}
+            editingId={editingId}
+          />
         </div>
-      ))}
+
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            padding: '24px',
+            borderRadius: '16px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            marginBottom: '20px'
+          }}
+        >
+          <Summary expenses={expenses} />
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            padding: '24px',
+            borderRadius: '16px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+          }}
+        >
+          <h2 style={{ marginBottom: '20px', color: '#1f2937' }}>Expense List</h2>
+
+          {loading ? (
+            <p>Loading...</p>
+          ) : expenses.length === 0 ? (
+            <p>No expenses yet.</p>
+          ) : (
+            <ExpenseList
+              expenses={expenses}
+              handleEdit={handleEdit}
+              handleDelete={handleDelete}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
